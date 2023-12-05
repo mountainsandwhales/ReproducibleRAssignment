@@ -1,0 +1,186 @@
+---
+title: "Question2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("janitor")
+install.packages("ragg")
+install.packages("ggsignif")
+install.packages("broom")
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(ragg)
+library(ggsignif)
+library(broom)
+```
+
+## QUESTION 2: Data Pipeline
+
+# Introduction
+
+I am interested in exploring the relationships between different factors in the palmer penguins dataset. I will first load, view and clean the raw data from the penguins dataset so that it is easier to use for data analysis. I have outlined by steps below.
+
+First, I will load the palmer penguins dataset.
+
+```{r loading palmerpenguins}
+install.packages("palmerpenguins")
+library(palmerpenguins)
+```
+
+I will save the raw data as a csv and create a folder named "data" in my working directory to store the data. Here I will keep the raw data, so I am not editing it. I will load the data from the saved version.
+
+```{r save and load data}
+dir.create("data")
+write.csv(penguins_raw, "data/penguins_raw.csv") 
+penguins_raw <- read.csv("data/penguins_raw.csv")
+```
+
+When I view the data, I can see that saving it as a csv put full stops in the titles where there were spaces.
+
+```{r view a data, echo=TRUE}
+head(penguins_raw)
+names(penguins_raw)
+```
+
+I would like to clean this so I will define and call a function then save a clean version of the raw data. I am defining a function so that I can use it at a later date if needed. 
+
+```{r defining a function}
+clean_function <- function(penguins_data) {
+  penguins_data %>%
+    select(-Comments) %>% #removes comments column
+    clean_names() %>% #cleans names
+    na.omit()  %>% #remove NAs
+    #shorten species names
+    mutate(species = case_when(
+      species == "Adelie Penguin (Pygoscelis adeliae)" ~ "Adelie",
+      species == "Chinstrap penguin (Pygoscelis antarctica)" ~ "Chinstrap",
+      species == "Gentoo penguin (Pygoscelis papua)" ~ "Gentoo"
+    ))
+}
+
+```
+
+I am calling the function and saving the now clean data in my "data" folder.
+
+```{r  calling function}
+
+penguins_clean <- clean_function(penguins_raw)
+
+write.csv(penguins_clean, "data/penguins_clean.csv")
+
+head(penguins_clean) #check if it is clean
+```
+
+# Hypothesis
+
+Now that the data is clean, I can explore it. I am interested in whether there is a correlation between body mass and flipper length in each of the 3 species of penguins.
+
+**My biological hypothesis is that there will be a positive correlation between body mass and flipper length in all 3 species because this ratio may be important to activities such as foraging, particularly in water.**
+
+I will plot body mass against flipper length and group by Species. I have done this as a function so that it is easier to reuse and I can track edits.
+
+```{r exploratory plot, echo=TRUE}
+plot_exploratory_figure <- function(penguins_clean) {
+  penguins_clean %>%
+    ggplot(aes(x = body_mass_g, y = flipper_length_mm, colour = species)) +
+    geom_point(alpha=0.5) +
+    labs(title = "Body Mass Against Flipper Length for 3 Species of Penguin", x = "Body Mass (g)", y = "Flipper Length (mm)")
+}
+
+exploratory_figure <- plot_exploratory_figure(penguins_clean)
+
+exploratory_figure
+```
+
+I will create a folder named "figures" and save my plot as a png here
+
+```{r saving exploratory figure }
+dir.create("figures")
+agg_png("figures/exploratoryfigure.png", 
+        width = 1000, height = 750, units = "px",res=300, scaling = 0.5)
+exploratory_figure
+dev.off()
+```
+
+# Stats method
+
+From the exploratory figure, it appears that there may be a positive correlation between body mass and flipper length, in all 3 species. I now need to statistically test this. The **null hypothesis**, H0, will be that there is so significant relationship between body mass and flipper length. The **alternative hypothesis**, H1, will be that flipper length increases with body mass.
+
+First, I will add a linear model to my plot
+
+```{r add linear model}
+exploratory_figure + geom_smooth(method="lm", formula = y~x)
+```
+
+It appears that each species has a positive correlation but they are not all the same. I will run my stats test by running a linear regression model for each species.
+
+Adelie
+
+```{r adelie linear regression model}
+model_adelie <- lm(flipper_length_mm ~ body_mass_g, data = subset(penguins_clean, species == "Adelie"))
+```
+
+Chinstrap
+
+```{r chinstrap linear regression model}
+model_chinstrap <- lm(flipper_length_mm ~ body_mass_g, data = subset(penguins_clean, species == "Chinstrap"))
+```
+
+Gentoo
+
+```{r gentoo linear regression model}
+model_gentoo <- lm(flipper_length_mm ~ body_mass_g, data = subset(penguins_clean, species == "Gentoo"))
+
+```
+
+# Results
+
+Here are the results of my linear regression models
+
+```{r model results }
+summary(model_adelie)
+summary(model_chinstrap)
+summary(model_gentoo)
+```
+
+I will add the p-values from the linear regression models results figure.
+
+```{r results figure }
+
+# I have used geom_smooth to add a linear model to my exploratory plot 
+# I have annotated the plot with the results of the linear models: 
+# Using annotate - this code tells r to go into the coefficient table of model and find the p value which is in row 2, column 4. Digits=3 specifies the digits. 
+
+(results_figure <- 
+  exploratory_figure +
+   geom_smooth(method="lm", formula=y~x)+
+  annotate("text", x = 6100, y = 180, hjust = 1, vjust = 0.5, label = sprintf("Adelie: p = %s", formatC(summary(model_adelie)$coef[2, 4],  digits = 3))) +
+  annotate("text", x = 6100, y = 180, hjust = 1, vjust = 1.5,label = sprintf("Chinstrap: p = %s", formatC(summary(model_chinstrap)$coef[2, 4],  digits = 3))) +
+  annotate("text", x = 6100, y = 180, hjust = 1, vjust = 2.5, label = sprintf("Gentoo: p = %s", formatC(summary(model_gentoo)$coef[2, 4], digits = 3))))
+
+ 
+```
+
+I will save this in my "figures" folder.
+
+```{r save results figure}
+agg_png("figures/resultsfigure.png", 
+        width = 1000, height = 750, units = "px",res=300, scaling = 0.5)
+results_figure
+dev.off()
+```
+
+# Discussion
+
+The results from the linear regression models allow us to reject the null hypothesis that there is no effect of body mass on flipper length. The intercept, coefficient and F-statistic p-values for Adelie, Chinstrap and Gentoo are all highly significant (p-value < 0.001). This suggests that for all 3 species, there is a positive relationship between body mass and flipper length and as body mass increases, flipper length increases. This means that body mass may be a predictor of flipper length but we cannot say that a larger body mass *causes* longer flippers.
+
+The appropriateness of the model can also be questioned,if we look at the R-squared values, which were different. For Adelie, it was 0.2347, for Chinstrap 0.4107, and for Gentoo 0.5059. This means that the linear regression model explains more (around 51%) of the variance in flipper length for Gentoo penguins than for Adelie (around 23%) and Chinstrap (around 41%). This suggests that the relationship may not be perfectly linear and so, there may be other factors to consider which are also important.
+
+# Conclusion
+
+It can be concluded from a linear regression model that there may be a positive relationship between body mass and flipper length for all 3 species of penguin present in this data-set. As body mass increases, flipper length appears to increase. However, the relationship may not be linear and so it would be useful to run non-linear models. It would also be interesting to explore the biological factors that can explain this relationship.
